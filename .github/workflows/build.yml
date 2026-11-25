@@ -16,7 +16,7 @@ jobs:
       - name: Install host dependencies and OpenSSL 1.1
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld make python3 unzip wget curl ca-certificates
+          sudo apt-get install -y clang lld llvm make python3 unzip wget curl ca-certificates
           wget -q http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
           sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2_amd64.deb
 
@@ -34,6 +34,12 @@ jobs:
           OO_DIR=$(dirname "$(find /opt/oo -name 'link.x' | head -n 1)")
           echo "OO_PS4_TOOLCHAIN=$OO_DIR" >> "$GITHUB_ENV"
           echo "Resolved OO_PS4_TOOLCHAIN=$OO_DIR"
+          if [ ! -f "$OO_DIR/src/modules/libc.prx" ] || [ ! -f "$OO_DIR/samples/dialogs/sce_sys/about/right.sprx" ]; then
+            git clone --depth 1 https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain.git /tmp/oo_src
+            echo "SYS_LIBC=$(find /tmp/oo_src /opt/oo -name 'libc.prx' | head -n 1)" >> "$GITHUB_ENV"
+            echo "SYS_FIOS2=$(find /tmp/oo_src /opt/oo -name 'libSceFios2.prx' | head -n 1)" >> "$GITHUB_ENV"
+            echo "SYS_RIGHT=$(find /tmp/oo_src /opt/oo -name 'right.sprx' | head -n 1)" >> "$GITHUB_ENV"
+          fi
 
       - name: Install PS4 Payload SDK
         env:
