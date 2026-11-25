@@ -43,10 +43,11 @@ LIBS    := -lc -lkernel -lSceNet -lSceUserService -lSceSystemService -lSceSysmod
            -lSceCommonDialog -lSceMsgDialog -lSceWebBrowserDialog -lScePad
 LDFLAGS := -m elf_x86_64 -pie --script $(TC)/link.x --eh-frame-hdr -L$(TC)/lib $(LIBS) $(TC)/lib/crt1.o
 
+HAVE_USBD  := $(wildcard $(USBD_SPRX))
 STAGE_FILES := eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/pic1.png \
                sce_sys/about/right.sprx sce_module/libc.prx sce_module/libSceFios2.prx \
                hearbridge_ps4_payload.elf hearbridge_game_tap.prx hearbridge_daemon.prx \
-               hearbridge_boot.prx libSceUsbd.sprx
+               hearbridge_boot.prx $(if $(HAVE_USBD),libSceUsbd.sprx)
 
 .PHONY: all
 all: $(OUT)/$(CONTENT_ID).pkg
@@ -131,7 +132,7 @@ stage-static:
 
 $(OUT)/$(CONTENT_ID).pkg: $(STAGE)/eboot.bin $(STAGE)/sce_sys/param.sfo $(STAGE)/hearbridge_ps4_payload.elf \
                           $(STAGE)/hearbridge_game_tap.prx $(STAGE)/hearbridge_daemon.prx \
-                          $(STAGE)/hearbridge_boot.prx $(STAGE)/libSceUsbd.sprx \
+                          $(STAGE)/hearbridge_boot.prx $(if $(HAVE_USBD),$(STAGE)/libSceUsbd.sprx) \
                           sce_sys/icon0.png sce_sys/pic1.png
 	$(MAKE) stage-static
 	cd $(STAGE) && rm -f pkg.gp4 && $(BIN)/create-gp4 -out pkg.gp4 --content-id=$(CONTENT_ID) --files "$(STAGE_FILES)"

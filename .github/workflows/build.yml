@@ -70,12 +70,8 @@ jobs:
           make game-tap
           make -C plugin boot daemon
 
-      - name: Build launcher PKGs (requires assets/libSceUsbd.sprx)
+      - name: Build launcher PKGs
         run: |
-          if [ ! -f assets/libSceUsbd.sprx ]; then
-            echo "::warning::assets/libSceUsbd.sprx not found; skipping .pkg packaging. Add assets/libSceUsbd.sprx or set the LIB_SCE_USBD_SPRX_B64 repository secret to build .pkg files."
-            exit 0
-          fi
           mkdir -p dist
           make launcher
           cp build/launcher/IV0000-HRBG40001_00-HEARBRIDGEPS4000.pkg dist/HearBridge-PS4-up-to-13.52.pkg
