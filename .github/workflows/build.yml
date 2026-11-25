@@ -1,0 +1,96 @@
+name: Build HearBridge PS4
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install host dependencies and OpenSSL 1.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld make python3 unzip wget curl ca-certificates
+          wget -q http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+          sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+
+      - name: Run host tests
+        run: make test
+
+      - name: Install OpenOrbis PS4 Toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/oo_dl
+          gh release download --repo OpenOrbis/OpenOrbis-PS4-Toolchain --pattern '*.tar.gz' --dir /tmp/oo_dl
+          sudo mkdir -p /opt/oo
+          sudo tar -xzf /tmp/oo_dl/*.tar.gz -C /opt/oo
+          OO_DIR=$(dirname "$(find /opt/oo -name 'link.x' | head -n 1)")
+          echo "OO_PS4_TOOLCHAIN=$OO_DIR" >> "$GITHUB_ENV"
+          echo "Resolved OO_PS4_TOOLCHAIN=$OO_DIR"
+
+      - name: Install PS4 Payload SDK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/ps4_dl
+          gh release download --repo ps4-payload-dev/sdk --pattern '*.zip' --dir /tmp/ps4_dl
+          sudo mkdir -p /opt/ps4-payload-sdk
+          sudo unzip -q /tmp/ps4_dl/*.zip -d /opt/ps4-payload-sdk
+          SDK_DIR=$(dirname "$(dirname "$(find /opt/ps4-payload-sdk -name 'orbis-clang' | head -n 1)")")
+          echo "PS4_PAYLOAD_SDK=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "Resolved PS4_PAYLOAD_SDK=$SDK_DIR"
+
+      - name: Install GoldHEN Plugins SDK
+        run: |
+          sudo git clone --depth 1 https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git /opt/GoldHEN_Plugins_SDK
+          sudo chown -R "$(id -u):$(id -g)" /opt/GoldHEN_Plugins_SDK
+          make -C /opt/GoldHEN_Plugins_SDK PRINTF=1
+          echo "GOLDHEN_SDK=/opt/GoldHEN_Plugins_SDK" >> "$GITHUB_ENV"
+
+      - name: Restore libSceUsbd.sprx from secret (if provided)
+        env:
+          LIB_SCE_USBD_SPRX_B64: ${{ secrets.LIB_SCE_USBD_SPRX_B64 }}
+        run: |
+          if [ ! -f assets/libSceUsbd.sprx ] && [ -n "$LIB_SCE_USBD_SPRX_B64" ]; then
+            mkdir -p assets
+            printf '%s' "$LIB_SCE_USBD_SPRX_B64" | base64 -d > assets/libSceUsbd.sprx
+            echo "Restored assets/libSceUsbd.sprx from secret"
+          fi
+
+      - name: Build payload and plugins
+        run: |
+          make payload
+          make game-tap
+          make -C plugin boot daemon
+
+      - name: Build launcher PKGs (requires assets/libSceUsbd.sprx)
+        run: |
+          if [ ! -f assets/libSceUsbd.sprx ]; then
+            echo "::warning::assets/libSceUsbd.sprx not found; skipping .pkg packaging. Add assets/libSceUsbd.sprx or set the LIB_SCE_USBD_SPRX_B64 repository secret to build .pkg files."
+            exit 0
+          fi
+          mkdir -p dist
+          make launcher
+          cp build/launcher/IV0000-HRBG40001_00-HEARBRIDGEPS4000.pkg dist/HearBridge-PS4-up-to-13.52.pkg
+          rm -rf build/launcher
+          make launcher TITLE='HearBridge 14.xx'
+          cp build/launcher/IV0000-HRBG40001_00-HEARBRIDGEPS4000.pkg dist/HearBridge-PS4-for-14.xx.pkg
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hearbridge-ps4-build
+          path: |
+            dist/*.pkg
+            build/hearbridge_ps4_payload.elf
+            build/hearbridge_game_tap.prx
+            build/hearbridge_boot.prx
+            build/hearbridge_daemon.prx
+          if-no-files-found: warn
